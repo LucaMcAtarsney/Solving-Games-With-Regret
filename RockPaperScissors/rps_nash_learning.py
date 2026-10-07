@@ -1,26 +1,29 @@
-"""Best-response learning for Rock-Paper-Scissors.
+"""Regret-matching for Rock-Paper-Scissors.
 
-This script learns a strategy against a fixed opponent policy. It keeps track
-of regret for each action and updates the player's mixed strategy toward the
-best response to the opponent's known strategy.
+This script trains both players in a zero-sum Rock-Paper-Scissors game by
+updating regret for each action and converting that regret into a mixed
+strategy. Over many iterations, the average strategy approaches the Nash
+equilibrium, where each action is played with roughly equal probability.
 
-For opponent strategy [0.2, 0.2, 0.4]
-The output player policy is [0.9999993333333334, 3.3333333333333335e-07, 3.3333333333333335e-07]
+The average strategy converges to [1/3, 1/3, 1/3].
 """
 
 import random
 
 ROCK, PAPER, SCISSORS, NUM_ACTIONS = 0, 1, 2, 3
 
-# Fixed opponent strategy. The learner is trying to exploit this distribution.
-opp_strategy = [0.2, 0.2, 0.4]
-
-# Current mixed strategy and regret totals for the learning player.
+# Player 0's current mixed strategy and regret totals.
 p0_strategy = [0.0] * NUM_ACTIONS
 p0_strategy_sum = [0.0] * NUM_ACTIONS
 p0_regret_sum = [0.0] * NUM_ACTIONS
 
-# Payoff matrix for Rock-Paper-Scissors. Positive values mean the row player wins.
+# Player 1's current mixed strategy and regret totals.
+p1_strategy = [0.0] * NUM_ACTIONS
+p1_strategy_sum = [0.0] * NUM_ACTIONS
+p1_regret_sum = [0.0] * NUM_ACTIONS
+
+# Zero-sum payoff matrix for Rock-Paper-Scissors.
+# Positive values mean the row player wins.
 PAYOFF = (
     (0, -1, 1),
     (1, 0, -1),
@@ -66,28 +69,40 @@ def getAction(strategy):
 
 
 def train(iterations):
-    """Update the strategy toward the best response to the fixed opponent."""
+    """Run regret matching for both players until their average strategies converge."""
 
     for i in range(iterations):
-        # Compute the current mixed strategy from accumulated regrets.
+        # Update each player's mixed strategy from their accumulated regret.
         p0_strategy = getStrategy(p0_regret_sum, p0_strategy_sum)
-        p1_strategy = opp_strategy
+        p1_strategy = getStrategy(p1_regret_sum, p1_strategy_sum)
 
-        # Expected payoff of each action against the fixed opponent.
+        # Expected payoff for each action against the opponent's current strategy.
         p0_utility = [
             sum(p1_strategy[opponent_action] * PAYOFF[player_action][opponent_action]
                 for opponent_action in range(NUM_ACTIONS))
             for player_action in range(NUM_ACTIONS)
         ]
 
-        # Expected value of the current mixed strategy.
+        p1_utility = [
+            sum(p0_strategy[opponent_action] * PAYOFF[player_action][opponent_action]
+                for opponent_action in range(NUM_ACTIONS))
+            for player_action in range(NUM_ACTIONS)
+        ]
+
+        # Expected value of each player's current mixed strategy.
         p0_expected_utility = sum(
             p0_strategy[action] * p0_utility[action] for action in range(NUM_ACTIONS)
         )
 
-        # Increase regret for actions that performed better than the current mix.
+        p1_expected_utility = sum(
+            p1_strategy[action] * p1_utility[action] for action in range(NUM_ACTIONS)
+        )
+
+        # Update regrets. Positive regret means an action did better than the
+        # current mixed strategy and should be weighted more in future rounds.
         for action in range(NUM_ACTIONS):
             p0_regret_sum[action] += p0_utility[action] - p0_expected_utility
+            p1_regret_sum[action] += p1_utility[action] - p1_expected_utility
 
         if i % 1000 == 0:
             print(f"finished iteration {i} ...")
